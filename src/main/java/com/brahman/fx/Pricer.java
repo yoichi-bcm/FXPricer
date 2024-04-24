@@ -60,11 +60,11 @@ import com.opengamma.strata.product.swap.type.FixedOvernightSwapConventions;
 
 public class Pricer {
   private static final CurveGroupName CURVE_GROUP_NAME = CurveGroupName.of("AUD-CURVE");
-  private static final String PATH_CONFIG = "Y:\\Strata_Risk\\resources\\";  
-  private static final ResourceLocator GROUPS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/groups_fx.csv"));
+  private static final String PATH_CONFIG = "Z:\\FX\\";  
+  private static final ResourceLocator GROUPS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "groups_fx.csv"));
+  private static final ResourceLocator SETTINGS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "settings_fx.csv"));
+  private static final ResourceLocator CALIBRATION_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "calibrations_fx.csv"));
   private static final ResourceLocator GROUPS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/groups.csv"));
-  private static final ResourceLocator SETTINGS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/settings_fx.csv"));
-  private static final ResourceLocator CALIBRATION_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_fx.csv"));
   private static final ResourceLocator QUOTES_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/quotes.csv"));
   private static final ResourceLocator FIXINGS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/aud-bbsw-fixings.csv"));
 //  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates_hist.csv"));
