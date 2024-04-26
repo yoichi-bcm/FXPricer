@@ -19,10 +19,25 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.collect.ImmutableMap;
 import com.opencsv.exceptions.CsvValidationException;
+import com.opengamma.strata.basics.ReferenceData;
 import com.opengamma.strata.basics.date.HolidayCalendar;
 import com.opengamma.strata.basics.date.HolidayCalendars;
 import com.opengamma.strata.calc.CalculationRunner;
+import com.opengamma.strata.collect.io.ResourceLocator;
+import com.opengamma.strata.collect.timeseries.LocalDateDoubleTimeSeries;
+import com.opengamma.strata.data.MarketData;
+import com.opengamma.strata.data.ObservableId;
+import com.opengamma.strata.loader.csv.FixingSeriesCsvLoader;
+import com.opengamma.strata.loader.csv.QuotesCsvLoader;
+import com.opengamma.strata.loader.csv.RatesCalibrationCsvLoader;
+import com.opengamma.strata.market.curve.CurveGroupName;
+import com.opengamma.strata.market.curve.RatesCurveGroupDefinition;
+import com.opengamma.strata.market.observable.QuoteId;
+import com.opengamma.strata.pricer.curve.CalibrationMeasures;
+import com.opengamma.strata.pricer.curve.RatesCurveCalibrator;
+import com.opengamma.strata.pricer.rate.ImmutableRatesProvider;
 
 public class Engine {
   public static HolidayCalendar calendar = HolidayCalendars.of("AUSY");
@@ -31,32 +46,23 @@ public class Engine {
   public static String DB_USERNAME;
 
   private static final String PATH_CONFIG = "Z:\\FX\\";  
-  private static final String configPath = PATH_CONFIG+"java_fx_config.txt";
+  private static final String configPath = PATH_CONFIG+"fx_config.txt";
   public static final LocalDate dateToday = LocalDate.now();
   
-  private static Map<String, String> getConfigMap() {
-    
-    Map<String, String> configMap = new HashMap<>();
-    try (BufferedReader br = new BufferedReader(new FileReader(configPath))) {
-      String line;
-      while ((line = br.readLine()) != null) {
-          // Split each line into key and value based on ":"
-          String[] parts = line.split("~");
-          if (parts.length == 2) {
-              String key = parts[0].trim();
-              String value = parts[1].trim();
-              // Add key-value pair to the map
-              configMap.put(key, value);
-          }
-      }
-  } catch (IOException e) {
-      // Handle file reading errors
-      e.printStackTrace();
-  }
-    return configMap;
-  }
+
+  private static final CurveGroupName CURVE_GROUP_NAME = CurveGroupName.of("AUD-CURVE");
+  private static final ResourceLocator GROUPS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "groups_fx.csv"));
+  private static final ResourceLocator SETTINGS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "settings_fx.csv"));
+  private static final ResourceLocator CALIBRATION_RESOURCE_FX = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_fx.csv"));
+//  private static final ResourceLocator GROUPS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/groups.csv"));
+  private static final ResourceLocator QUOTES_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/quotes.csv"));
+  private static final ResourceLocator FIXINGS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/aud-bbsw-fixings.csv"));
+//  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates_hist.csv"));
+//  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates.csv"));
+//  private static final ResourceLocator SETTINGS_RESOURCE_PV = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/settings_pv.csv"));
+  private static final ResourceLocator CALIBRATION_RESOURCE_RBA = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_RBA.csv"));
   
-  public static void main(String[] args) throws FileNotFoundException, IOException, CsvValidationException {
+public static void main(String[] args) throws FileNotFoundException, IOException, CsvValidationException {
     
     Map<String,String> configMap = getConfigMap();
     DB_URL = configMap.get("URL");
@@ -67,12 +73,47 @@ public class Engine {
     SaveQuotes(dateToday);
     
     GetCalibrations.generateCalibrations();
-    
     try (CalculationRunner runnerxxx = CalculationRunner.ofMultiThreaded()) {
       LocalDate todayxxx = calendar.previous(LocalDate.now());
-      Pricer.calculate(runnerxxx, todayxxx);
+      ReferenceData refData = ReferenceData.standard();
+      LocalDate VAL_DATE = LocalDate.now().minusDays(0);
+      
+      Map<CurveGroupName, RatesCurveGroupDefinition> defns =
+          RatesCalibrationCsvLoader.load(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE, CALIBRATION_RESOURCE_RBA);
+      ImmutableMap<ObservableId, LocalDateDoubleTimeSeries> fixings = FixingSeriesCsvLoader.load(FIXINGS_RESOURCE);
+      CalibrationMeasures CALIBRATION_MEASURES = CalibrationMeasures.PAR_SPREAD;
+      RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(1e-3, 1e-3, 100, CALIBRATION_MEASURES);
+      ImmutableMap<QuoteId, Double> MAP_MQ = QuotesCsvLoader.load(VAL_DATE, QUOTES_RESOURCE);
+      MarketData marketData = MarketData.of(VAL_DATE, MAP_MQ, fixings);
+      ImmutableRatesProvider multicurve = CALIBRATOR.calibrate(defns.get(CURVE_GROUP_NAME), marketData, refData);
+      System.out.println();
+      
+      
+//      Pricer.calculate(runnerxxx, todayxxx);
     }
   }
+  
+  
+  private static Map<String, String> getConfigMap() {
+    
+    Map<String, String> configMap = new HashMap<>();
+    try (BufferedReader br = new BufferedReader(new FileReader(configPath))) {
+      String line;
+      while ((line = br.readLine()) != null) {
+          String[] parts = line.split("~");
+          if (parts.length == 2) {
+              String key = parts[0].trim();
+              String value = parts[1].trim();
+              configMap.put(key, value);
+          }
+      }
+  } catch (IOException e) {
+      // Handle file reading errors
+      e.printStackTrace();
+  }
+    return configMap;
+  }
+  
   
   public static void SaveBackTestFixings(LocalDate calcdate){
     Connection conn = null;
@@ -91,8 +132,7 @@ public class Engine {
       sql = conn.createStatement();
       String query = 
           "SELECT * " +
-          "FROM aud_fixings " +   
-          "WHERE date < '" + calcdate + "'";
+          "FROM aud_fixings";
       //System.out.println(query);
       ResultSet rs = sql.executeQuery(query);   
       
@@ -144,8 +184,8 @@ public class Engine {
       sql = conn.createStatement();
       String query = 
           "SELECT * " +
-          "FROM aud_quotes " +   
-          "WHERE \"valuation date\" < '" + calcdate + "'";
+          "FROM aud_quotes" 
+          ;
       //System.out.println(query);
       ResultSet rs = sql.executeQuery(query);   
       
