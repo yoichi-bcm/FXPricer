@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.opencsv.exceptions.CsvValidationException;
 import com.opengamma.strata.basics.date.HolidayCalendar;
 import com.opengamma.strata.basics.date.HolidayCalendars;
 import com.opengamma.strata.calc.CalculationRunner;
@@ -55,7 +56,7 @@ public class Engine {
     return configMap;
   }
   
-  public static void main(String[] args) throws FileNotFoundException, IOException {
+  public static void main(String[] args) throws FileNotFoundException, IOException, CsvValidationException {
     
     Map<String,String> configMap = getConfigMap();
     DB_URL = configMap.get("URL");
@@ -64,6 +65,8 @@ public class Engine {
     
     SaveBackTestFixings(dateToday);
     SaveQuotes(dateToday);
+    
+    GetCalibrations.generateCalibrations();
     
     try (CalculationRunner runnerxxx = CalculationRunner.ofMultiThreaded()) {
       LocalDate todayxxx = calendar.previous(LocalDate.now());

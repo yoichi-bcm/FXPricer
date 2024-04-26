@@ -63,14 +63,14 @@ public class Pricer {
   private static final String PATH_CONFIG = "Z:\\FX\\";  
   private static final ResourceLocator GROUPS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "groups_fx.csv"));
   private static final ResourceLocator SETTINGS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "settings_fx.csv"));
-  private static final ResourceLocator CALIBRATION_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "calibrations_fx.csv"));
+  private static final ResourceLocator CALIBRATION_RESOURCE_FX = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_fx.csv"));
   private static final ResourceLocator GROUPS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/groups.csv"));
   private static final ResourceLocator QUOTES_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/quotes.csv"));
   private static final ResourceLocator FIXINGS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/aud-bbsw-fixings.csv"));
 //  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates_hist.csv"));
   private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates.csv"));
   private static final ResourceLocator SETTINGS_RESOURCE_PV = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/settings_pv.csv"));
-  private static final ResourceLocator CALIBRATION_RESOURCE_PV = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_pv.csv"));
+  private static final ResourceLocator CALIBRATION_RESOURCE_RBA = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_RBA.csv"));
   
   public static void calculate(CalculationRunner runner, LocalDate calcdate) throws FileNotFoundException{
     ReferenceData refData = ReferenceData.standard();
@@ -83,7 +83,7 @@ public class Pricer {
     
     DateTimeFormatter formatterdate = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
-    Map<CurveGroupName, RatesCurveGroupDefinition> defns = RatesCalibrationCsvLoader.load(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE, CALIBRATION_FX_RESOURCE);    
+    Map<CurveGroupName, RatesCurveGroupDefinition> defns = RatesCalibrationCsvLoader.load(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE, CALIBRATION_RESOURCE_RBA);    
     ImmutableMap<ObservableId, LocalDateDoubleTimeSeries> fixings = FixingSeriesCsvLoader.load(FIXINGS_RESOURCE);
     CalibrationMeasures CALIBRATION_MEASURES = CalibrationMeasures.PAR_SPREAD;   
     //RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(1e-2, 1e-2, 100, CALIBRATION_MEASURES);
