@@ -40,11 +40,13 @@ import com.opengamma.strata.market.observable.QuoteId;
 import com.opengamma.strata.market.param.CurrencyParameterSensitivities;
 import com.opengamma.strata.measure.fx.FxSingleTradeCalculations;
 import com.opengamma.strata.measure.fx.FxSwapTradeCalculations;
+import com.opengamma.strata.measure.swap.SwapTradeCalculations;
 import com.opengamma.strata.pricer.curve.CalibrationMeasures;
 import com.opengamma.strata.pricer.curve.RatesCurveCalibrator;
 import com.opengamma.strata.pricer.fx.DiscountingFxSingleTradePricer;
 import com.opengamma.strata.pricer.fx.DiscountingFxSwapTradePricer;
 import com.opengamma.strata.pricer.rate.ImmutableRatesProvider;
+import com.opengamma.strata.pricer.swap.DiscountingSwapTradePricer;
 import com.opengamma.strata.product.AttributeType;
 import com.opengamma.strata.product.TradeInfo;
 import com.opengamma.strata.product.common.BuySell;
@@ -237,13 +239,13 @@ public class Pricer {
     CurrencyParameterSensitivities tradesensi = fxTradeCalc.pv01CalibratedBucketed(resolvedfx, multicurve);
     MultiCurrencyAmount tradepv = fxTradeCalc.presentValue(resolvedfx, multicurve);
     
-    
+
+    System.out.println();
     System.out.println("FX FWD Pxing: " + fwddate);
     System.out.println("parrate:" + fxparrate);
     System.out.println("swaprate:" + (fxparrate.fxRate(CurrencyPair.of(Currency.AUD, Currency.USD))-fxrate)*10000.0);
     System.out.println("tradepv: " + tradeamount);
     
-    System.out.println();
     
   }
 
@@ -317,6 +319,25 @@ public class Pricer {
     
     ResolvedSwapTrade resolvedusdaonia = newswapwithInfo.resolve(refData);
     return resolvedusdaonia;
+  }
+  
+  public static void getRate(double notional, LocalDate enddate, ImmutableRatesProvider multicurve, String id) {
+    LocalDate startdate = Engine.VAL_DATE;
+    ResolvedSwapTrade resolvedAud = createaudoisswaptrade(100, startdate, enddate, 0);
+    ResolvedSwapTrade resolvedUsd = createusdoisswaptrade(100, startdate, enddate, 0);
+    
+    DiscountingSwapTradePricer PRICER_SWAP = DiscountingSwapTradePricer.DEFAULT;
+    SwapTradeCalculations swapTradeCalc = new SwapTradeCalculations(PRICER_SWAP);
+    double audParRate = swapTradeCalc.parRate(resolvedAud, multicurve);
+    double usdParRate = swapTradeCalc.parRate(resolvedUsd, multicurve);
+
+//    double pvAud = swapTradeCalc.presentValue(resolvedAud, multicurve).getAmount(Currency.AUD).getAmount() / Math.pow(1 + audParRate, (enddate.toEpochDay() - startdate.toEpochDay()) / 365.0);
+//    double pvUsd = swapTradeCalc.presentValue(resolvedUsd, multicurve).getAmount(Currency.USD).getAmount() / Math.pow(1 + usdParRate, (enddate.toEpochDay() - startdate.toEpochDay()) / 365.0);
+    
+    ;
+    double swaprate = ((1+ usdParRate)) / (1 + audParRate)* 0.65;
+    
+    System.out.println(id + ": " + swaprate);
   }
   
   

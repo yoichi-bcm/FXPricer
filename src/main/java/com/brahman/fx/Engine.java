@@ -22,22 +22,32 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 import com.opencsv.exceptions.CsvValidationException;
 import com.opengamma.strata.basics.ReferenceData;
+import com.opengamma.strata.basics.currency.Currency;
+import com.opengamma.strata.basics.currency.FxRate;
 import com.opengamma.strata.basics.date.HolidayCalendar;
 import com.opengamma.strata.basics.date.HolidayCalendars;
 import com.opengamma.strata.calc.CalculationRunner;
 import com.opengamma.strata.collect.io.ResourceLocator;
 import com.opengamma.strata.collect.timeseries.LocalDateDoubleTimeSeries;
+import com.opengamma.strata.data.FxRateId;
+import com.opengamma.strata.data.ImmutableMarketData;
 import com.opengamma.strata.data.MarketData;
 import com.opengamma.strata.data.ObservableId;
 import com.opengamma.strata.loader.csv.FixingSeriesCsvLoader;
+import com.opengamma.strata.loader.csv.FxRatesCsvLoader;
 import com.opengamma.strata.loader.csv.QuotesCsvLoader;
 import com.opengamma.strata.loader.csv.RatesCalibrationCsvLoader;
+import com.opengamma.strata.market.curve.Curve;
 import com.opengamma.strata.market.curve.CurveGroupName;
+import com.opengamma.strata.market.curve.CurveName;
 import com.opengamma.strata.market.curve.RatesCurveGroupDefinition;
 import com.opengamma.strata.market.observable.QuoteId;
+import com.opengamma.strata.measure.swap.SwapTradeCalculations;
 import com.opengamma.strata.pricer.curve.CalibrationMeasures;
 import com.opengamma.strata.pricer.curve.RatesCurveCalibrator;
 import com.opengamma.strata.pricer.rate.ImmutableRatesProvider;
+import com.opengamma.strata.pricer.swap.DiscountingSwapTradePricer;
+import com.opengamma.strata.product.swap.ResolvedSwapTrade;
 
 public class Engine {
   public static HolidayCalendar calendar = HolidayCalendars.of("AUSY");
@@ -45,180 +55,132 @@ public class Engine {
   public static String DB_PASSWORD;
   public static String DB_USERNAME;
 
-  private static final String PATH_CONFIG = "Z:\\FX\\";  
-  private static final String configPath = PATH_CONFIG+"fx_config.txt";
+  public static final String PATH_CONFIG = "Z:\\FX\\";  
+  public static final String configPath = PATH_CONFIG+"fx_config.txt";
   public static final LocalDate dateToday = LocalDate.now();
   
 
   private static final CurveGroupName CURVE_GROUP_NAME = CurveGroupName.of("AUD-CURVE");
   private static final ResourceLocator GROUPS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "groups_fx.csv"));
+  private static final ResourceLocator GROUPS_XCCY_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "groups_fx_2.csv"));
   private static final ResourceLocator SETTINGS_FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "settings_fx.csv"));
   private static final ResourceLocator CALIBRATION_RESOURCE_FX = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_fx.csv"));
 //  private static final ResourceLocator GROUPS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/groups.csv"));
   private static final ResourceLocator QUOTES_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/quotes.csv"));
+  private static final ResourceLocator FX_RATES_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates-xccy-ois.csv"));
   private static final ResourceLocator FIXINGS_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/aud-bbsw-fixings.csv"));
 //  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates_hist.csv"));
 //  private static final ResourceLocator FX_RESOURCE = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/quotes/fx-rates.csv"));
 //  private static final ResourceLocator SETTINGS_RESOURCE_PV = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/settings_pv.csv"));
   private static final ResourceLocator CALIBRATION_RESOURCE_RBA = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_RBA.csv"));
-  
+  public static LocalDate VAL_DATE = LocalDate.now().minusDays(0);
 public static void main(String[] args) throws FileNotFoundException, IOException, CsvValidationException {
     
-    Map<String,String> configMap = getConfigMap();
+    Map<String,String> configMap = GetFiles.getConfigMap();
     DB_URL = configMap.get("URL");
     DB_PASSWORD = configMap.get("Password");
     DB_USERNAME = configMap.get("Username");
     
-    SaveBackTestFixings(dateToday);
-    SaveQuotes(dateToday);
+    GetFiles.SaveBackTestFixings(dateToday);
+    GetFiles.SaveQuotes(dateToday);
     
-    GetCalibrations.generateCalibrations();
-    try (CalculationRunner runnerxxx = CalculationRunner.ofMultiThreaded()) {
-      LocalDate todayxxx = calendar.previous(LocalDate.now());
-      ReferenceData refData = ReferenceData.standard();
-      LocalDate VAL_DATE = LocalDate.now().minusDays(0);
+    GetFiles.generateCalibrations();
+    
+    ImmutableRatesProvider multicurve = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
+
+    ImmutableRatesProvider multicurve_xccy = getMulticurve(GROUPS_XCCY_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
       
-      Map<CurveGroupName, RatesCurveGroupDefinition> defns =
-          RatesCalibrationCsvLoader.load(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE, CALIBRATION_RESOURCE_RBA);
-      ImmutableMap<ObservableId, LocalDateDoubleTimeSeries> fixings = FixingSeriesCsvLoader.load(FIXINGS_RESOURCE);
-      CalibrationMeasures CALIBRATION_MEASURES = CalibrationMeasures.PAR_SPREAD;
-      RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(1e-3, 1e-3, 100, CALIBRATION_MEASURES);
-      ImmutableMap<QuoteId, Double> MAP_MQ = QuotesCsvLoader.load(VAL_DATE, QUOTES_RESOURCE);
-      MarketData marketData = MarketData.of(VAL_DATE, MAP_MQ, fixings);
-      ImmutableRatesProvider multicurve = CALIBRATOR.calibrate(defns.get(CURVE_GROUP_NAME), marketData, refData);
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusDays(7));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(7)), multicurve, "1w");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusDays(7));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(7)), multicurve_xccy, "1w xccy");
+      System.out.println();
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusDays(14));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(14)), multicurve, "2w");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusDays(14));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(14)), multicurve_xccy, "2w xccy");
+      System.out.println();
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(1));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(1)), multicurve, "1m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(1));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(1)), multicurve_xccy, "1m xccy");
+      System.out.println();
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(2));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(2)), multicurve, "2m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(2));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(2)), multicurve_xccy, "2m xccy");
       System.out.println();
       
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(3));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(3)), multicurve, "3m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(3));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(3)), multicurve_xccy, "3m xccy");
+      System.out.println();
       
-//      Pricer.calculate(runnerxxx, todayxxx);
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(4));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(4)), multicurve, "4m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(4));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(4)), multicurve_xccy, "4m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(5));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(5)), multicurve, "5m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(5));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(5)), multicurve_xccy, "5m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(6));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(6)), multicurve, "6m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(6));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(6)), multicurve_xccy, "6m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(9));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(9)), multicurve, "9m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(9));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(9)), multicurve_xccy, "9m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(12));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(12)), multicurve, "12m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(12));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(12)), multicurve_xccy, "12m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(18));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(18)), multicurve, "18m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(18));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(18)), multicurve_xccy, "18m xccy");
+      System.out.println();
+      
+      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(24));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(24)), multicurve, "24m");
+      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(24));
+      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(24)), multicurve_xccy, "24m xccy");
+      System.out.println();
+
+  }
+  
+  public static ImmutableRatesProvider getMulticurve(ResourceLocator groups, ResourceLocator settings, ResourceLocator quotes, ResourceLocator fxRate, ResourceLocator calibration) {
+    try (CalculationRunner runnerxxx = CalculationRunner.ofMultiThreaded()) {
+      ReferenceData refData = ReferenceData.standard();
+      Map<CurveGroupName, RatesCurveGroupDefinition> defns =
+          RatesCalibrationCsvLoader.load(groups, settings, calibration);
+      CalibrationMeasures CALIBRATION_MEASURES = CalibrationMeasures.PAR_SPREAD;
+      RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(1e-3, 1e-3, 100, CALIBRATION_MEASURES);
+      ImmutableMap<QuoteId, Double> MAP_MQ = QuotesCsvLoader.load(VAL_DATE, quotes);
+      Map<FxRateId, FxRate> fxRates = FxRatesCsvLoader.load(VAL_DATE, fxRate);
+      MarketData marketData = ImmutableMarketData.builder(VAL_DATE)
+          .addValueMap(MAP_MQ)
+          .addValueMap(fxRates)
+          .build();
+      
+      ImmutableRatesProvider multicurve = CALIBRATOR.calibrate(defns.get(CURVE_GROUP_NAME), marketData, refData);
+      return multicurve;
     }
   }
   
-  
-  private static Map<String, String> getConfigMap() {
-    
-    Map<String, String> configMap = new HashMap<>();
-    try (BufferedReader br = new BufferedReader(new FileReader(configPath))) {
-      String line;
-      while ((line = br.readLine()) != null) {
-          String[] parts = line.split("~");
-          if (parts.length == 2) {
-              String key = parts[0].trim();
-              String value = parts[1].trim();
-              configMap.put(key, value);
-          }
-      }
-  } catch (IOException e) {
-      // Handle file reading errors
-      e.printStackTrace();
-  }
-    return configMap;
-  }
-  
-  
-  public static void SaveBackTestFixings(LocalDate calcdate){
-    Connection conn = null;
-    Statement sql= null; 
-    String folderPath = PATH_CONFIG + "aud/quotes/";
-    String fileName = "aud-bbsw-fixings.csv";
-    Path filePath = Paths.get(folderPath, fileName);
-    
-    try
-    {
-      File file = new File(folderPath, fileName);
-      if(file.exists()) {
-        Files.delete(filePath);
-      }      
-      conn  = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
-      sql = conn.createStatement();
-      String query = 
-          "SELECT * " +
-          "FROM aud_fixings";
-      //System.out.println(query);
-      ResultSet rs = sql.executeQuery(query);   
-      
-      ResultSetMetaData metaData = rs.getMetaData();
-      int columnCount = metaData.getColumnCount();      
-      DateTimeFormatter formatterdate = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-      
-      try(FileWriter writer = new FileWriter(folderPath + fileName)) {
-        for (int i = 1; i <= columnCount; i++) {
-          String columnName = metaData.getColumnName(i);
-          
-          writer.append(columnName);
-          if(i == (columnCount))
-          {
-            writer.append("\n");
-          }
-          else
-          {
-            writer.append(",");
-          }
-        }
-       while (rs.next()) {         
-         writer.append(rs.getString(1) + "," + LocalDate.parse(rs.getString(2)).format(formatterdate) + "," + rs.getString(3) + "\n");         
-       } 
-       writer.close();
-      }catch (IOException e) {
-        e.printStackTrace();
-      }      
-      conn.close();
-    }catch(Exception e){
-      e.printStackTrace();
-      System.out.println(e.getMessage());      
-    }
-  }
-  
-  public static void SaveQuotes(LocalDate calcdate) {
-    Connection conn = null;
-    Statement sql= null; 
-    String folderPath = PATH_CONFIG + "aud/quotes/";
-    String fileName = "quotes.csv";
-    Path filePath = Paths.get(folderPath, fileName);
-    try
-    {
-      File file = new File(folderPath, fileName);
-      if(file.exists()) {
-        Files.delete(filePath);
-      }      
-      conn  = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
-      sql = conn.createStatement();
-      String query = 
-          "SELECT * " +
-          "FROM aud_quotes" 
-          ;
-      //System.out.println(query);
-      ResultSet rs = sql.executeQuery(query);   
-      
-      ResultSetMetaData metaData = rs.getMetaData();
-      int columnCount = metaData.getColumnCount();      
-      DateTimeFormatter formatterdate = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-      
-      try(FileWriter writer = new FileWriter(folderPath + fileName)) {
-        for (int i = 1; i <= columnCount; i++) {
-          String columnName = metaData.getColumnName(i);
-          
-          writer.append(columnName);
-          if(i == (columnCount))
-          {
-            writer.append("\n");
-          }
-          else
-          {
-            writer.append(",");
-          }
-        }
-       while (rs.next()) {         
-         writer.append(LocalDate.parse(rs.getString(1)).format(formatterdate) + "," + rs.getString(2) + "," + rs.getString(3)+ "," + rs.getString(4)+ "," + rs.getDouble(5) + "\n");         
-       } 
-       writer.close();
-      }catch (IOException e) {
-        e.printStackTrace();
-      }      
-      conn.close();
-    }catch(Exception e){
-      e.printStackTrace();
-      System.out.println(e.getMessage());      
-    }
-  }
   
 }
