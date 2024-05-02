@@ -33,11 +33,27 @@ public class GetFiles {
     List<LocalDate> RBADates = new ArrayList<>();
     
     RBADates = getRBADates(2024,2026);
+    
+    List<Double> spreads = new ArrayList<>();
+    spreads.add(-0.0001);
+    spreads.add(-0.0001);
+    spreads.add(-0.00025);
+    spreads.add(-0.00025);
+    spreads.add(-0.00135);
+    spreads.add(-0.00135);
+    spreads.add(-0.0001);
+    spreads.add(-0.0001);
+    spreads.add(-0.00025);
+    spreads.add(-0.00025);
+    spreads.add(-0.00135);
+    spreads.add(-0.00135);
+    
+    
     int[] daysToMeet = new int[RBADates.size()];
     for(int i = 0; i < RBADates.size(); i++) {
       daysToMeet[i] = (int) (RBADates.get(i).toEpochDay() - Engine.VAL_DATE.toEpochDay());
     }
-    String[] columns = new String[] {"Curve Name", "Label", "Symbology", "Ticker", "Field Name", "Type", "Convention", "Time","Date"};
+    String[] columns = new String[] {"Curve Name", "Label", "Symbology", "Ticker", "Field Name", "Type", "Convention", "Time","Date","Spread"};
     String[] row1 = new String[] {"AUD-Disc", "OIS-1D", "OG-Ticker", "AUD-AONIA", "MarketValue", "OIS", "AUD-FIXED-TERM-AONIA-OIS", "1D"};
     String RBACalibrations = "Z:\\FX\\aud\\curves\\calibrations_RBA.csv";
     String defaultFxFwdCalibrations = "Z:\\FX\\aud\\curves\\calibrations_fxfwd.csv";
@@ -50,7 +66,7 @@ public class GetFiles {
         if(daysToMeet[i] > 0 && i+1 < 15) {
           String[] row = new String[] {"AUD-Disc", "RBA-"+counter+"M", "OG-Ticker",
               "AUD-RBA-"+counter+"M", "MarketValue", "OIS", "AUD-FIXED-TERM-AONIA-OIS",
-              daysToMeet[i]+"D", LocalDate.parse(RBADates.get(i+1).toString(),formatter).toString()};
+              daysToMeet[i]+"D", LocalDate.parse(RBADates.get(i+1).toString(),formatter).toString(), spreads.get(counter-1)+""};
           writer.writeNext(row);
           counter = counter+1;
         }

@@ -232,7 +232,6 @@ public class Pricer {
     
     DiscountingFxSingleTradePricer  PRICER_FX = DiscountingFxSingleTradePricer .DEFAULT;
     FxSingleTradeCalculations fxTradeCalc = new FxSingleTradeCalculations(PRICER_FX);
-    
     FxRate fxparrate = fxTradeCalc.forwardFxRate(resolvedfx, multicurve);
     MultiCurrencyAmount tradeamount = fxTradeCalc.currencyExposure(resolvedfx, multicurve);
     MultiCurrencyAmount tradecash = fxTradeCalc.currentCash(resolvedfx, multicurve);
@@ -339,6 +338,17 @@ public class Pricer {
     
     System.out.println(id + ": " + swaprate);
     return swaprate;
+  }
+  
+  public static double qwerty(LocalDate enddate, ImmutableRatesProvider multicurve) {
+    LocalDate startdate = Engine.VAL_DATE;
+    ResolvedSwapTrade resolvedAud = createaudoisswaptrade(100, startdate, enddate, 0);
+    ResolvedSwapTrade resolvedUsd = createusdoisswaptrade(100, startdate, enddate, 0);
+
+    DiscountingSwapTradePricer PRICER_SWAP = DiscountingSwapTradePricer.DEFAULT;
+    SwapTradeCalculations swapTradeCalc = new SwapTradeCalculations(PRICER_SWAP);
+    
+    return 0;
   }
   
   

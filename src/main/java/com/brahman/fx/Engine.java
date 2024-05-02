@@ -95,21 +95,36 @@ public static void main(String[] args) throws FileNotFoundException, IOException
     GetFiles.generateCalibrations();
     double fx = GetFiles.getFxRates(VAL_DATE);
     
-    ImmutableRatesProvider multicurve_rba = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
-        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
-    
+
     ImmutableRatesProvider multicurve_aonia = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
-        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_FX);
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_FX, 1e-4);
+    
+    ImmutableRatesProvider multicurve_rba = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA, 1e-3);
+    
 
     ImmutableRatesProvider multicurve_rba_xccy = getMulticurve(GROUPS_XCCY_FX_RESOURCE, SETTINGS_FX_RESOURCE,
-        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA, 1e-3);
     
     Curve aoniaCurve = multicurve_aonia.getCurves().get(CurveName.of("AUD-Disc"));
     
     Curve rbaCurve = multicurve_rba.getCurves().get(CurveName.of("AUD-Disc"));
     
     double divisor = 365;
-    double pointCount = divisor*2;
+    double pointCount = 548;
+    
+
+
+    try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\rbaCurve.csv"))) {
+        try (CSVWriter writer2 = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\aoniaCurve.csv"))) {
+          for(int i =0; i <pointCount; i++) {
+            double rate = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusDays(7), multicurve_rba, "");
+            double rate2 = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusDays(7), multicurve_aonia, "");
+            writer.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate+"", rate2+""});
+            writer2.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate2+"", rate+""});
+          }
+        }
+      }
     
     try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\aoniaCurve.csv"))) {
       for (int i = 0; i < pointCount; i++) {
@@ -128,17 +143,6 @@ public static void main(String[] args) throws FileNotFoundException, IOException
         writer.writeNext(row);
       }
     }
-
-    try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\rbaCurve.csv"))) {
-        try (CSVWriter writer2 = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\aoniaCurve.csv"))) {
-          for(int i =0; i <pointCount; i++) {
-            double rate = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusYears(1), multicurve_rba, "");
-            writer.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate+""});
-            double rate2 = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusYears(1), multicurve_aonia, "");
-            writer2.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate2+""});
-          }
-        }
-      }
     
     
     
@@ -155,13 +159,13 @@ public static void main(String[] args) throws FileNotFoundException, IOException
 
   }
   
-  public static ImmutableRatesProvider getMulticurve(ResourceLocator groups, ResourceLocator settings, ResourceLocator quotes, ResourceLocator fxRate, ResourceLocator calibration) {
+  public static ImmutableRatesProvider getMulticurve(ResourceLocator groups, ResourceLocator settings, ResourceLocator quotes, ResourceLocator fxRate, ResourceLocator calibration, double tolerance) {
     try (CalculationRunner runnerxxx = CalculationRunner.ofMultiThreaded()) {
       ReferenceData refData = ReferenceData.standard();
       Map<CurveGroupName, RatesCurveGroupDefinition> defns =
           RatesCalibrationCsvLoader.load(groups, settings, calibration);
       CalibrationMeasures CALIBRATION_MEASURES = CalibrationMeasures.PAR_SPREAD;
-      RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(1e-3, 1e-3, 100, CALIBRATION_MEASURES);
+      RatesCurveCalibrator CALIBRATOR = RatesCurveCalibrator.of(tolerance, tolerance, 100, CALIBRATION_MEASURES);
       ImmutableMap<QuoteId, Double> MAP_MQ = QuotesCsvLoader.load(VAL_DATE, quotes);
       Map<FxRateId, FxRate> fxRates = FxRatesCsvLoader.load(VAL_DATE, fxRate);
       MarketData marketData = ImmutableMarketData.builder(VAL_DATE)
