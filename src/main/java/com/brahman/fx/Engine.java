@@ -107,8 +107,6 @@ public static void main(String[] args) throws FileNotFoundException, IOException
     Curve aoniaCurve = multicurve_aonia.getCurves().get(CurveName.of("AUD-Disc"));
     
     Curve rbaCurve = multicurve_rba.getCurves().get(CurveName.of("AUD-Disc"));
-    Curve rbaXccyCurve = multicurve_rba_xccy.getCurves().get(CurveName.of("AUD_Disc"));
-    
     
     double divisor = 365;
     double pointCount = divisor*2;
