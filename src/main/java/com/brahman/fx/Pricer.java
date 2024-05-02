@@ -321,7 +321,7 @@ public class Pricer {
     return resolvedusdaonia;
   }
   
-  public static void getRate(double notional, LocalDate enddate, ImmutableRatesProvider multicurve, String id) {
+  public static double getRate(double notional,LocalDate startDate, LocalDate enddate, ImmutableRatesProvider multicurve, String id) {
     LocalDate startdate = Engine.VAL_DATE;
     ResolvedSwapTrade resolvedAud = createaudoisswaptrade(100, startdate, enddate, 0);
     ResolvedSwapTrade resolvedUsd = createusdoisswaptrade(100, startdate, enddate, 0);
@@ -338,6 +338,7 @@ public class Pricer {
     double swaprate = ((1+ usdParRate)) / (1 + audParRate)* 0.65;
     
     System.out.println(id + ": " + swaprate);
+    return swaprate;
   }
   
   

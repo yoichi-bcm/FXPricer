@@ -15,11 +15,15 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.time.LocalDate;
+import java.time.Period;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import com.google.common.collect.ImmutableMap;
+import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvValidationException;
 import com.opengamma.strata.basics.ReferenceData;
 import com.opengamma.strata.basics.currency.Currency;
@@ -37,11 +41,13 @@ import com.opengamma.strata.loader.csv.FixingSeriesCsvLoader;
 import com.opengamma.strata.loader.csv.FxRatesCsvLoader;
 import com.opengamma.strata.loader.csv.QuotesCsvLoader;
 import com.opengamma.strata.loader.csv.RatesCalibrationCsvLoader;
+import com.opengamma.strata.market.ValueType;
 import com.opengamma.strata.market.curve.Curve;
 import com.opengamma.strata.market.curve.CurveGroupName;
 import com.opengamma.strata.market.curve.CurveName;
 import com.opengamma.strata.market.curve.RatesCurveGroupDefinition;
 import com.opengamma.strata.market.observable.QuoteId;
+import com.opengamma.strata.market.param.ParameterMetadata;
 import com.opengamma.strata.measure.swap.SwapTradeCalculations;
 import com.opengamma.strata.pricer.curve.CalibrationMeasures;
 import com.opengamma.strata.pricer.curve.RatesCurveCalibrator;
@@ -74,6 +80,8 @@ public class Engine {
 //  private static final ResourceLocator SETTINGS_RESOURCE_PV = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/settings_pv.csv"));
   private static final ResourceLocator CALIBRATION_RESOURCE_RBA = ResourceLocator.ofFile(new File(PATH_CONFIG + "aud/curves/calibrations_RBA.csv"));
   public static LocalDate VAL_DATE = LocalDate.now().minusDays(0);
+  
+  public static List<Period> periods = List.of(Period.ofDays(7), Period.ofDays(14), Period.ofMonths(1), Period.ofMonths(2),Period.ofMonths(3),Period.ofMonths(4),Period.ofMonths(5),Period.ofMonths(6),Period.ofMonths(9),Period.ofYears(1),Period.ofMonths(18),Period.ofYears(2));
 public static void main(String[] args) throws FileNotFoundException, IOException, CsvValidationException {
     
     Map<String,String> configMap = GetFiles.getConfigMap();
@@ -85,81 +93,67 @@ public static void main(String[] args) throws FileNotFoundException, IOException
     GetFiles.SaveQuotes(dateToday);
     
     GetFiles.generateCalibrations();
+    double fx = GetFiles.getFxRates(VAL_DATE);
     
-    ImmutableRatesProvider multicurve = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+    ImmutableRatesProvider multicurve_rba = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
         QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
+    
+    ImmutableRatesProvider multicurve_aonia = getMulticurve(GROUPS_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+        QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_FX);
 
-    ImmutableRatesProvider multicurve_xccy = getMulticurve(GROUPS_XCCY_FX_RESOURCE, SETTINGS_FX_RESOURCE,
+    ImmutableRatesProvider multicurve_rba_xccy = getMulticurve(GROUPS_XCCY_FX_RESOURCE, SETTINGS_FX_RESOURCE,
         QUOTES_RESOURCE, FX_RATES_RESOURCE, CALIBRATION_RESOURCE_RBA);
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusDays(7));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(7)), multicurve, "1w");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusDays(7));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(7)), multicurve_xccy, "1w xccy");
+    
+    Curve aoniaCurve = multicurve_aonia.getCurves().get(CurveName.of("AUD-Disc"));
+    
+    Curve rbaCurve = multicurve_rba.getCurves().get(CurveName.of("AUD-Disc"));
+    Curve rbaXccyCurve = multicurve_rba_xccy.getCurves().get(CurveName.of("AUD_Disc"));
+    
+    
+    double divisor = 365;
+    double pointCount = divisor*2;
+    
+    try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\aoniaCurve.csv"))) {
+      for (int i = 0; i < pointCount; i++) {
+        double xVal = i*(1.0/divisor);
+        double yVal = aoniaCurve.yValue(xVal);
+        String[] row = {String.valueOf(xVal), String.valueOf(yVal)};
+        writer.writeNext(row);
+      }
+    }
+    
+    try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\rbaCurve.csv"))) {
+      for (int i = 0; i < pointCount; i++) {
+        double xVal = i*(1.0/divisor);
+        double yVal = rbaCurve.yValue(xVal);
+        String[] row = {String.valueOf(xVal), String.valueOf(yVal)};
+        writer.writeNext(row);
+      }
+    }
+
+    try (CSVWriter writer = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\rbaCurve.csv"))) {
+        try (CSVWriter writer2 = new CSVWriter(new FileWriter("Z:\\FX\\aud\\curves\\aoniaCurve.csv"))) {
+          for(int i =0; i <pointCount; i++) {
+            double rate = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusYears(1), multicurve_rba, "");
+            writer.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate+""});
+            double rate2 = Pricer.getRate(100, VAL_DATE.plusDays(i), VAL_DATE.plusDays(i).plusYears(1), multicurve_aonia, "");
+            writer2.writeNext(new String[] {VAL_DATE.plusDays(i).toString(), rate2+""});
+          }
+        }
+      }
+    
+    
+    
+    for(int i = 0; i < periods.size(); i++) {
+      Pricer.pricefxfwd(dateToday, multicurve_rba, fx, VAL_DATE.plus(periods.get(i)));
+      Pricer.getRate(100,VAL_DATE, calendar.nextOrSame(VAL_DATE.plus(periods.get(i))), multicurve_rba, periods.get(i).toString() + " rba");
+      Pricer.pricefxfwd(dateToday, multicurve_rba_xccy, fx, VAL_DATE.plus(periods.get(i)));
+      Pricer.getRate(100,VAL_DATE, calendar.nextOrSame(VAL_DATE.plus(periods.get(i))), multicurve_rba_xccy, periods.get(i).toString() + " rba xccy");
+      Pricer.pricefxfwd(dateToday, multicurve_aonia, fx, VAL_DATE.plus(periods.get(i)));
+      Pricer.getRate(100,VAL_DATE, calendar.nextOrSame(VAL_DATE.plus(periods.get(i))), multicurve_aonia, periods.get(i).toString() + " aonia");
       System.out.println();
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusDays(14));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(14)), multicurve, "2w");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusDays(14));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusDays(14)), multicurve_xccy, "2w xccy");
-      System.out.println();
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(1));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(1)), multicurve, "1m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(1));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(1)), multicurve_xccy, "1m xccy");
-      System.out.println();
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(2));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(2)), multicurve, "2m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(2));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(2)), multicurve_xccy, "2m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(3));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(3)), multicurve, "3m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(3));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(3)), multicurve_xccy, "3m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(4));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(4)), multicurve, "4m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(4));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(4)), multicurve_xccy, "4m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(5));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(5)), multicurve, "5m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(5));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(5)), multicurve_xccy, "5m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(6));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(6)), multicurve, "6m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(6));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(6)), multicurve_xccy, "6m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(9));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(9)), multicurve, "9m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(9));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(9)), multicurve_xccy, "9m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(12));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(12)), multicurve, "12m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(12));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(12)), multicurve_xccy, "12m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(18));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(18)), multicurve, "18m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(18));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(18)), multicurve_xccy, "18m xccy");
-      System.out.println();
-      
-      Pricer.pricefxfwd(VAL_DATE, multicurve, 0.65, VAL_DATE.plusMonths(24));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(24)), multicurve, "24m");
-      Pricer.pricefxfwd(VAL_DATE, multicurve_xccy, 0.65, VAL_DATE.plusMonths(24));
-      Pricer.getRate(100, calendar.nextOrSame(VAL_DATE.plusMonths(24)), multicurve_xccy, "24m xccy");
-      System.out.println();
+    }
+    
 
   }
   

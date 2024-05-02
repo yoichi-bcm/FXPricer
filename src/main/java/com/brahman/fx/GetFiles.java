@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -91,7 +92,7 @@ public class GetFiles {
     }
     return mondays;
 }
-
+  
 public static Map<String, String> getConfigMap() {
     
     Map<String, String> configMap = new HashMap<>();
@@ -111,7 +112,31 @@ public static Map<String, String> getConfigMap() {
   }
     return configMap;
   }
-  
+
+
+  public static double getFxRates(LocalDate VAL_DATE) {
+    Connection conn = null;
+    Statement sql= null;
+    DateTimeFormatter formatterdate = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    try {
+      conn  = DriverManager.getConnection(Engine.DB_URL, Engine.DB_USERNAME, Engine.DB_PASSWORD);
+      sql = conn.createStatement();
+      String query = "select * from aud_quotes where ticker = 'AUD-FX-0D' and \"valuation date\" = '"+LocalDate.parse(VAL_DATE.toString()).format(formatterdate)+"'";
+      ResultSet rs = sql.executeQuery(query);
+      rs.next();
+      double fx = rs.getDouble("value");
+      try(CSVWriter writer = new CSVWriter(new FileWriter(Engine.PATH_CONFIG + "aud/quotes/fx-rates-xccy-ois.csv"))) {
+        writer.writeNext(new String[] {"Valuation Date", "Currency Pair","Value"});
+        writer.writeNext(new String[] {LocalDate.parse(VAL_DATE.toString()).format(formatterdate), "AUD/USD", (fx+"")});
+        return fx;
+      }catch (IOException e) {
+        e.printStackTrace();
+      }
+    } catch (SQLException ex) {
+      ex.printStackTrace();
+    }
+    return 0;
+  }
   
   public static void SaveBackTestFixings(LocalDate calcdate){
     Connection conn = null;
@@ -135,7 +160,7 @@ public static Map<String, String> getConfigMap() {
       ResultSet rs = sql.executeQuery(query);   
       
       ResultSetMetaData metaData = rs.getMetaData();
-      int columnCount = metaData.getColumnCount();      
+      int columnCount = metaData.getColumnCount();
       DateTimeFormatter formatterdate = DateTimeFormatter.ofPattern("yyyy-MM-dd");
       
       try(FileWriter writer = new FileWriter(folderPath + fileName)) {
